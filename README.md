@@ -1,91 +1,111 @@
-# Macweek — cinq démonstrations pour petites missions
+# Studio Applications — cinq outils métier locaux
 
-Sites vitrines, outils internes, API et automatisation de fichiers. Réalisations de démonstration, conçues avec une assistance IA et vérifiées par des tests fonctionnels. Aucune référence client fictive présentée comme réelle.
+Une suite de cinq applications partageant une administration et une base SQLite. Il s’agit d’une version locale fonctionnelle : les données sont réellement enregistrées, les actions sont contrôlées côté serveur, et les écrans permettent de parcourir les usages de bout en bout.
 
-**Prestations exclusivement à distance, réalisées depuis un Mac.**
+## Démarrer
 
-## Démarrer sur Mac
-
-Prérequis : Python 3.9+ et, pour Booking API, Node.js 20+. Aucune bibliothèque externe à installer. Les commandes sont à exécuter dans ce dossier.
+Python 3.9 ou supérieur, sans bibliothèque à installer :
 
 ```sh
 python3 server.py
 ```
 
-Ouvrir **http://localhost:8765**. Le serveur écoute uniquement sur la machine locale. Arrêt : `Ctrl+C`.
+Ouvrir **http://localhost:8765**, puis **Administration**. Créer soi-même le compte propriétaire avec son email et un mot de passe de 12 caractères minimum. Les mots de passe sont hachés avec PBKDF2-HMAC-SHA256 (600 000 itérations, sel aléatoire). La session dure 12 heures et utilise un cookie HttpOnly / SameSite=Strict. Le service est limité à la machine locale. Arrêt : Ctrl+C.
 
-Pour le laboratoire Node.js, dans un second terminal :
+Aucun identifiant prédéfini n’est fourni pour l’installation. La base commence vide ; le site dispose d’un contenu initial modifiable. Le bouton « Créer un exemple » du gestionnaire de commandes ajoute une commande fictive, seulement sur demande.
 
-```sh
-node api-node/server.mjs
-```
+## 1. Site et demandes clients
 
-Ouvrir **http://localhost:8766**. Les deux serveurs sont indépendants.
+- Vue visiteur : présentation, prestations, estimation indicative et demande de contact.
+- Administration : modifier le nom, le titre, le texte, la couleur et les prestations existantes.
+- Les demandes sont enregistrées dans une boîte de réception et peuvent être marquées traitées ou archivées.
+- Les demandes ne déclenchent pas d’email automatique. Le lien email permet d’utiliser sa messagerie.
 
-## Les projets
+Parcours : modifier un titre → enregistrer → ouvrir le site → envoyer une demande → retrouver la demande dans l’administration.
 
-| Projet | Besoin client illustré | Technologies | Démonstration |
-|---|---|---|---|
-| Atelier Lisière | Site vitrine artisan, qualification de demande | HTML, CSS responsive, JavaScript | `/artisan/` |
-| Mission Desk | Suivi de petites missions et de leur progression | JavaScript, LocalStorage, export JSON | `/missions/` |
-| Stock Clair | Inventaire et intégration avec une API | Python, SQLite, HTTP REST | `/stock/` |
-| CSV Propre | Réduction des tâches de nettoyage manuel | Python, CSV, interface web et CLI | `/csv/` |
-| Booking API | Réservation de créneaux avec gestion des conflits | Node.js, API REST, tests natifs | `/booking.html` puis port 8766 |
+## 2. Commandes, règlements et livraison
 
-## Tests
+- Commandes persistantes : client, adresse, objet, lignes de produits ou prestations, quantités, prix, remise et TVA.
+- Les montants sont calculés en centimes côté serveur, avec un arrondi au centime.
+- Avancement de commande distinct du statut de livraison et de paiement.
+- Règlements : acomptes, paiements partiels et soldes, avec moyen de paiement, date et référence. Le solde est calculé depuis les écritures.
+- Deux paiements simultanés ne peuvent pas dépasser le solde : les écritures sont sérialisées en transaction.
+- Livraison : non préparée, en préparation, prête, expédiée, livrée ; transporteur et référence facultatifs.
+- Émission de facture : numéro annuel unique, copie figée des lignes et des coordonnées à l’émission, consultation et impression / sauvegarde PDF depuis le navigateur.
+- Les lignes d’une commande facturée ne sont plus modifiables. Les paiements reçus et la livraison restent accessibles.
+- Export des commandes en JSON.
 
-```sh
-python3 -m unittest discover -s tests -v
-node --test api-node/server.test.mjs
-```
+Les règlements sont des paiements déjà reçus et enregistrés manuellement : cette application ne débite pas de carte bancaire. Avant une utilisation commerciale des factures, renseigner les mentions adaptées à son entreprise et faire valider le document. Cette version ne traite pas les avoirs, remboursements, corrections d’écritures de paiement, paiements en ligne ni la transmission de factures électroniques. Elle ne remplace pas un logiciel comptable certifié ou une plateforme de facturation agréée.
 
-Les tests Python démarrent un serveur temporaire sur le port 18765 et utilisent une base temporaire : aucune donnée de démonstration n’est modifiée. Ils couvrent notamment les sorties de stock concurrentes, les quantités invalides, les doublons et les CSV. Les tests Node couvrent le conflit entre deux réservations du même créneau, l’annulation et les requêtes invalides.
+## 3. Inventaire et mouvements
 
-## API Stock Clair
+- Créer et modifier une référence : nom, SKU unique, seuil d’alerte et valeur unitaire.
+- Entrées / sorties avec motif obligatoire et historique horodaté.
+- Transactions SQLite pour empêcher un stock négatif, même lors de sorties concurrentes.
+- Alertes sous le seuil, valeur totale, recherche et export CSV.
+- Archivage d’une référence à stock nul, avec conservation de son historique.
+- L’écran et son export de mouvements affichent les 200 derniers mouvements ; l’export global inclut tout l’historique.
 
-```sh
-curl http://localhost:8765/api/products
-curl -X POST http://localhost:8765/api/products -H 'Content-Type: application/json' -d '{"name":"Clavier","quantity":5}'
-curl -X POST http://localhost:8765/api/products/1/movements -H 'Content-Type: application/json' -d '{"delta":-1}'
-curl http://localhost:8765/api/movements
-```
+## 4. Nettoyage CSV
 
-`POST /api/products` : 201 si créé, 400 si invalide, 409 si le nom existe. `POST /api/products/:id/movements` : 200 si enregistré, 404 si absent, 409 si le stock dépasserait les limites. Quantités entières entre 0 et 1 000 000. Historique limité aux 100 derniers mouvements. Les références initiales sont des exemples et leur stock initial n’est pas inclus dans l’historique des mouvements.
+- Import UTF-8 ou collage direct, aperçu avant / après et exemple à charger.
+- Colonnes requises : `nom` et `email`, en-têtes insensibles à la casse et espaces externes nettoyés.
+- Virgule, point-virgule ou tabulation. Maximum 1 Mo.
+- Normalisation des emails, déduplication par email (première ligne valide conservée), contrôle de syntaxe et rapport des lignes rejetées.
+- Neutralisation des formules de tableur dans les cellules exportées.
+- Téléchargement du CSV nettoyé et du rapport JSON.
+- Historique des traitements : seul le nom du fichier et les compteurs sont enregistrés ; le contenu des contacts ne l’est pas.
 
-Base créée automatiquement dans `data/demo.sqlite3`, exclue de Git. Pour réinitialiser, arrêter le serveur puis déplacer ce fichier. Une base vide est ensuite recréée au lancement. `DEMO_DB` permet de choisir un autre chemin.
+Le fichier source n’est jamais modifié. Seules les colonnes nom et email sont conservées ; la validité réelle des boîtes email n’est pas vérifiée.
 
-## API Booking
-
-```sh
-curl http://localhost:8766/api/slots
-curl -X POST http://localhost:8766/api/bookings -H 'Content-Type: application/json' -d '{"name":"Alice Exemple","slot":"09:00"}'
-curl -X DELETE http://localhost:8766/api/bookings/IDENTIFIANT_RETOURNE
-```
-
-Les créneaux représentent une journée fictive, sans date ni fuseau horaire. Réponse 201 pour une création, 409 pour un créneau occupé, 400 pour une demande invalide, 404 pour une annulation inconnue. Réservations en mémoire : perdues à chaque arrêt du serveur.
-
-## Automatisation CSV
+Utilisation autonome, sans serveur :
 
 ```sh
 python3 automation/clean_contacts.py automation/exemple.csv /tmp/contacts-propres.csv
 ```
 
-Produit un CSV et `/tmp/contacts-propres.report.json`. Format UTF-8, en-têtes `nom,email` (ou point-virgule/tabulation). Les colonnes supplémentaires ne sont pas conservées. Déduplication par email, première ligne valide conservée ; validation de syntaxe simple, sans vérification de délivrabilité. Les valeurs qui pourraient être interprétées comme formules de tableur sont neutralisées. Les lignes invalides sont indiquées dans le rapport. Utiliser uniquement des données fictives dans la démo.
+## 5. Réservations et planning
 
-## Structure
+- Vue visiteur : choix de prestation, date, créneau et confirmation.
+- Créneaux d’une heure, heure de Paris, dans les douze prochains mois.
+- Contrôle transactionnel empêchant les doubles réservations et les chevauchements.
+- Confirmation avec lien privé d’annulation. Conserver ce lien : aucun email n’est envoyé.
+- Planning administrateur : recherche par date, statuts confirmé / réalisé / annulé et export JSON.
+- Disponibilités configurables : créneaux et jours de fermeture hebdomadaires. Les rendez-vous existants sont conservés.
+- Les informations sont persistantes après redémarrage.
 
-- `web/` : portfolio et interfaces autonomes sans dépendance réseau.
-- `server.py` : serveur local Python, API et stockage SQLite.
-- `api-node/` : serveur Node.js indépendant et ses tests.
-- `automation/` : script CSV autonome et jeu d’exemple.
-- `tests/` : vérifications Python de bout en bout.
+Cette version gère un seul agenda et des rendez-vous d’une heure. Elle ne propose pas de synchronisation calendrier, de rappels email / SMS ou d’encaissement.
 
-## Limites et adaptation pour un client
+## Données et sauvegarde
 
-Ces templates sont des démonstrations locales : pas d’authentification, de gestion des droits, d’hébergement de production ni de sauvegarde automatisée. Ne pas exposer directement ces serveurs sur Internet. Pour une livraison client, prévoir selon le besoin : authentification, sauvegardes, hébergement HTTPS, protection des données, supervision, tests d’usage et adaptation graphique. Le simulateur artisan n’envoie aucun formulaire et ses prix sont fictifs. Mission Desk stocke ses données dans le navigateur courant ; l’export est manuel. Aucun paiement ni envoi d’email n’est effectué.
+Base : `data/applications.sqlite3`, exclue de Git, permissions du fichier limitées au propriétaire. Le stockage n’est pas chiffré par l’application : protéger l’ordinateur et ses sauvegardes. Pour changer le chemin : variable `DEMO_DB`.
 
-Ce dépôt ne contient pas l’application privée de facturation prévue ultérieurement, ni aucune donnée comptable ou personnelle réelle.
+Pour une sauvegarde restaurable : arrêter le serveur puis copier le fichier SQLite. Pour restaurer : arrêter le serveur et replacer la copie à ce même chemin. L’export JSON de l’administration est consultable et contient les données métier, sans mots de passe ni sessions. Il n’existe pas d’import JSON.
 
-## Licence
+L’ancienne base `data/demo.sqlite3`, si présente, est conservée mais n’est pas utilisée ni migrée : elle appartenait à la première démonstration.
 
-MIT — voir `LICENSE`.
+## Vérification
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+Les tests utilisent un serveur et une base temporaires, sans toucher aux données locales. Ils vérifient notamment : accès privé, rejet des requêtes intersites, calculs de remise / TVA, paiements concurrents, gel de facture, livraison, stock concurrent, annulation de réservation et traitement CSV.
+
+## Structure et API
+
+- `server.py` : serveur HTTP local, authentification, API et transactions.
+- `web/` : interfaces HTML / CSS / JavaScript sans dépendances externes.
+- `automation/` : nettoyage CSV utilisable séparément.
+- `tests/` : tests d’intégration du serveur.
+- `api-node/` : exemple technique autonome de la première version, API Node.js de réservation en mémoire. Il n’est pas utilisé par la nouvelle suite ; le planning persistant utilise l’API Python.
+
+Routes publiques : `/api/session`, `/api/site` (lecture), `/api/contact`, `/api/slots`, `/api/reservations` (création), `/api/reservations/cancel`. Routes privées : commandes, paiements, factures, inventaire, CSV, planning et paramètres. Création de compte unique via `/api/setup`, connexion `/api/login`, déconnexion `/api/logout`.
+
+## Limites de livraison à un client
+
+Les fonctionnalités décrites sont opérationnelles pour une installation locale mono-entreprise. Une mise à disposition sur Internet nécessite un serveur de production, HTTPS, gestion des secrets, sauvegardes automatisées, protection et supervision adaptées, ainsi qu’une validation des exigences du client et des documents de facturation. Le serveur inclus n’est pas un serveur de production. Il n’y a ni gestion multi-utilisateurs, ni réinitialisation de mot de passe par email, ni intégration bancaire. Ne pas exposer ce serveur local directement sur Internet.
+
+La comptabilité privée et la préparation des déclarations fiscales restent un projet distinct. La suite ne réalise aucune déclaration administrative.
+
+Licence MIT : voir LICENSE.
